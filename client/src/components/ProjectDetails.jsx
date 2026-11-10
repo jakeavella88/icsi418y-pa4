@@ -6,6 +6,7 @@ function ProjectDetails({project, onBack}) {
     const [users, setUsers] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState("");
 
+    
     async function fetchMembers() {
     const response = await fetch(`/api/projects/${project._id}/members`);
     if (response.ok) setMembers(await response.json());
@@ -17,6 +18,7 @@ function ProjectDetails({project, onBack}) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedUserId })
     });
+
     const data = await response.json();
     setMessage(data.message);
     if (response.ok) fetchMembers();

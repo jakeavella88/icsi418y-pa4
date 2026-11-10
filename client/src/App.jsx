@@ -7,6 +7,7 @@ import Login from './components/Login'
 import Signup from './components/Signup'
 import CreateProject from './components/CreateProject'
 import ProjectList from './components/ProjectList'
+import UserStories from './components/UserStories'
 
 function App() {
   const [currentView, setCurrentView] = useState('login')
@@ -43,6 +44,13 @@ function App() {
           List of Projects
         </button>
 
+        <button
+          className={currentView === 'userStories' ? 'active' : ''}
+          onClick={() => setCurrentView('userStories')}
+          >
+            User Stories
+          </button>
+
       </nav>
 
       <section className="auth-content">
@@ -50,6 +58,7 @@ function App() {
         {currentView === 'signup' && <Signup />}
         {currentView === 'createProject' && <CreateProject />}
         {currentView === 'projectList' && <ProjectList />}
+        {currentView === 'userStories' && <UserStories />}
       </section>
       </main>
     </>

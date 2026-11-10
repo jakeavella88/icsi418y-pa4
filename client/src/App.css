@@ -1,3 +1,12 @@
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+    margin: 0 auto;
+
+}
+
 .counter {
   font-size: 16px;
   padding: 5px 10px;

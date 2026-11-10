@@ -388,6 +388,364 @@ app.get("/api/projects/:projectId/members", async (req, res) => {
 
 
 
+/**************************************
+        * IMPLEMENT BELOW *
+**************************************/
+
+const validPriorities = ["High", "Medium", "Low"];
+const validStatuses = ["To Do", "In Progress", "Done"];
+
+function validObjectId(id) {
+    return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+async function isProjectMember(db, projectId, userId) {
+    const membership = await db.collection("projectMemberships").findOne({
+        project_id: projectId,
+        user_id: userId
+    });
+
+    return membership !== null;
+}
+
+
+// Link existing projects
+app.get("/api/projects", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        const projects = await db.collection("projects")
+            .find({})
+            .toArray();
+        
+        res.json(projects);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+// List a current project's members
+app.get("/api/projects/:projectId/members", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        if (!validObjectId(req.params.projectId)) {
+            return res.status(400).json({
+                message: "Invalid project ID"
+            });
+        }
+
+        const projectId = new ObjectId(req.params.projectId);
+
+        const project = await db.collection("projects").findOne({
+            _id: projectId
+        });
+
+        if(!project) {
+            return res.status(404).json({
+                message: "Project not found"
+            });
+        }
+
+        const memberships = await db.collection("projectMemberships")
+            .find({project_id: projectId})
+            .toArray();
+
+            const userIds = memberships.map(membership => membership.user_id);
+
+            const members = await db.collection("users")
+                .find(
+                    { _id: { $in: userIds } },
+                    { projection: { password: 0 } }
+                )
+                .toArray();
+            
+                res.json(members);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+
+// List a project's stories
+app.get("/api/projects/:projectId/stories", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        if(!validObjectId(req.params.projectId)) {
+            return res.status(400).json({
+                message: "Invalid project ID"
+            });
+        }
+
+        const projectId = new ObjectId(req.params.projectId);
+
+        const project = await db.collection("projects").findOne({
+            _id: projectId
+        });
+
+        if(!project) {
+            return res.status(404).json({
+                message: "Project not found"
+            });
+        }
+
+        const userStories = await db.collection("userStories")
+            .find({ project_id: projectId})
+            .toArray();
+        
+        res.json(userStories);  
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+
+// Create a story
+app.post("/api/projects/:projectId/stories", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        const { title, description, priority, assigned_user_id } = req.body;
+
+        if(!validObjectId(req.params.projectId)) {
+            return res.status(400).json({
+                message: "Invalid project ID"
+            });
+        }
+
+        const projectId = new ObjectId(req.params.projectId);
+
+        const project = await db.collection("projects").findOne({
+            _id: projectId
+        });
+
+        if(!project) {
+            return res.status(404).json({
+                message: "Project not found"
+            });
+        }
+
+        if (typeof title !== "string" || !title.trim() || 
+            typeof description !== "string" || !description.trim()) {
+                return res.status(400).json({
+                    message: "Title and description required"
+                });
+            }
+        
+        if(!validPriorities.includes(priority)) {
+            return res.status(400).json({
+                message: "Invalid priority"
+            });
+        }
+
+        let assignedUserId = null;
+
+        if(assigned_user_id !== null && assigned_user_id !== undefined && assigned_user_id !== "") {
+            if(!validObjectId(assigned_user_id)) {
+                return res.status(400).json({
+                    message: "Invalid assigned user ID"
+                });
+            }
+    
+            assignedUserId = new ObjectId(assigned_user_id);
+
+            const isMember = await isProjectMember(
+                db, projectId, assignedUserId
+            );
+
+            if(!isMember) {
+                return res.status(400).json({
+                    message: "Assigned user is not a member of this project"
+                });
+            }
+        }
+
+        const newStory = {
+            project_id: projectId,
+            title: title.trim(),
+            description: description.trim(),
+            priority: priority,
+            status: "To Do",
+            assigned_user_id: assignedUserId
+        };
+
+        const result = await db.collection("userStories").insertOne(newStory);
+
+        res.status(201).json({
+            message: "User story created successfully",
+            _id: result.insertedId
+        });
+        
+        
+
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+
+// Save an edited story
+app.put("/api/projects/:projectId/stories/:storyId", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        const { title, description, priority, status, assigned_user_id } = req.body;
+
+        if (!validObjectId(req.params.projectId) ||
+            !validObjectId(req.params.storyId)) {
+            return res.status(400).json({
+                message: "Invalid project or story ID"
+            });
+        }
+
+        const projectId = new ObjectId(req.params.projectId);
+        const storyId = new ObjectId(req.params.storyId);
+
+        const project = await db.collection("projects").findOne({
+            _id: projectId
+        });
+
+        if (!project) {
+            return res.status(404).json({
+                message: "Project not found"
+            });
+        }
+
+        const story = await db.collection("userStories").findOne({
+            _id: storyId,
+            project_id: projectId
+        });
+
+        if (!story) {
+            return res.status(404).json({
+                message: "User story not found in this project"
+            });
+        }
+
+        if (typeof title !== "string" || !title.trim() ||
+            typeof description !== "string" || !description.trim()) {
+            return res.status(400).json({
+                message: "Title and description are required"
+            });
+        }
+
+        if (!validPriorities.includes(priority)) {
+            return res.status(400).json({
+                message: "Invalid priority"
+            });
+        }
+
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({
+                message: "Invalid status"
+            });
+        }
+
+        let assignedUserId = null;
+
+        if (assigned_user_id !== null && assigned_user_id !== undefined && assigned_user_id !== "") {
+
+            if (!validObjectId(assigned_user_id)) {
+                return res.status(400).json({
+                    message: "Invalid assigned user ID"
+                });
+            }
+
+            assignedUserId = new ObjectId(assigned_user_id);
+
+            const isMember = await isProjectMember(
+                db, projectId, assignedUserId
+            );
+
+            if (!isMember) {
+                return res.status(400).json({
+                    message: "Assigned user is not a member of this project"
+                });
+            }
+        }
+
+        await db.collection("userStories").updateOne(
+            { _id: storyId, project_id: projectId },
+            {
+                $set: {
+                    title: title.trim(),
+                    description: description.trim(),
+                    priority: priority,
+                    status: status,
+                    assigned_user_id: assignedUserId
+                }
+            }
+        );
+
+        res.json({
+            message: "User story updated successfully"
+        });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+
+// Delete a story
+app.delete("/api/projects/:projectId/stories/:storyId", async (req, res) => {
+    try {
+        const db = client.db("pa2");
+
+        if (!validObjectId(req.params.projectId) ||
+            !validObjectId(req.params.storyId)) {
+            return res.status(400).json({
+                message: "Invalid project or story ID"
+            });
+        }
+
+        const projectId = new ObjectId(req.params.projectId);
+        const storyId = new ObjectId(req.params.storyId);
+
+        const result = await db.collection("userStories").deleteOne({
+            _id: storyId,
+            project_id: projectId
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({
+                message: "User story not found in this project"
+            });
+        }
+
+        res.json({
+            message: "User story deleted successfully"
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+});
+
+
+
 
 
 app.listen(9000, () => {
